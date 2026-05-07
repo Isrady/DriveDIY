@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
   },
-  serverExternalPackages: ["@anthropic-ai/sdk", "twilio"],
+  serverExternalPackages: ["@anthropic-ai/sdk", "twilio", "stripe", "resend"],
 };
 
 export default nextConfig;

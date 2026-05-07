@@ -3,16 +3,16 @@
 
   "functions": {
     "app/api/commander/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 10
     },
     "app/api/agents/ops/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 10
     },
     "app/api/agents/marketing/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 10
     },
     "app/api/agents/crm/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 10
     },
     "app/api/webhooks/stripe/route.ts": {
       "maxDuration": 10

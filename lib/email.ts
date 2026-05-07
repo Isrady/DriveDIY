@@ -1,7 +1,12 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY!);
-const FROM = process.env.RESEND_FROM_EMAIL ?? "noreply@drivediy.ae";
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY!);
+}
+
+function FROM() {
+  return process.env.RESEND_FROM_EMAIL ?? "noreply@drivediy.ae";
+}
 
 export async function sendBookingConfirmation(params: {
   to: string;
@@ -88,8 +93,8 @@ export async function sendBookingConfirmation(params: {
 </body>
 </html>`;
 
-  return resend.emails.send({
-    from: FROM,
+  return getResend().emails.send({
+    from: FROM(),
     to: params.to,
     subject: `Booking Confirmed — ${params.bayName} at DriveDIY`,
     html,
@@ -130,8 +135,8 @@ export async function sendFollowUpEmail(params: {
 </body>
 </html>`;
 
-  return resend.emails.send({
-    from: FROM,
+  return getResend().emails.send({
+    from: FROM(),
     to: params.to,
     subject: "Your bay is waiting — DriveDIY",
     html,
@@ -185,8 +190,8 @@ export async function sendWelcomeEmail(params: {
 </body>
 </html>`;
 
-  return resend.emails.send({
-    from: FROM,
+  return getResend().emails.send({
+    from: FROM(),
     to: params.to,
     subject: "Welcome to DriveDIY — Your bay is ready",
     html,

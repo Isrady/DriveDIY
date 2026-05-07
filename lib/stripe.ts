@@ -1,10 +1,17 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-04-22.dahlia",
-  typescript: true,
-});
+let stripeInstance: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!stripeInstance) {
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: "2026-04-22.dahlia",
+      typescript: true,
+    });
+  }
+  return stripeInstance;
+}
 
 function getSupabaseAdmin() {
   return createClient(
@@ -25,7 +32,7 @@ export async function getOrCreateStripeCustomer(
 
   if (user?.stripe_customer_id) return user.stripe_customer_id;
 
-  const customer = await stripe.customers.create({
+  const customer = await getStripe().customers.create({
     email,
     metadata: { supabase_user_id: userId },
   });
@@ -44,7 +51,7 @@ export async function createBookingPaymentIntent(
   userId: string,
   customerId?: string
 ): Promise<Stripe.PaymentIntent> {
-  return stripe.paymentIntents.create({
+  return getStripe().paymentIntents.create({
     amount: Math.round(amountAED * 100), // Convert AED to fils
     currency: "aed",
     customer: customerId,
@@ -57,7 +64,7 @@ export async function createSubscription(
   customerId: string,
   priceId: string
 ): Promise<Stripe.Subscription> {
-  return stripe.subscriptions.create({
+  return getStripe().subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }],
     payment_behavior: "default_incomplete",
@@ -68,5 +75,5 @@ export async function createSubscription(
 export async function cancelSubscription(
   subscriptionId: string
 ): Promise<Stripe.Subscription> {
-  return stripe.subscriptions.cancel(subscriptionId);
+  return getStripe().subscriptions.cancel(subscriptionId);
 }
