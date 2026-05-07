@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "regions": ["dxb1"],
+
   "functions": {
     "app/api/commander/route.ts": {
       "maxDuration": 60
