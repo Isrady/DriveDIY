@@ -137,22 +137,16 @@ Then **redeploy** after adding vars.
 
 | Issue | Impact | Fix |
 |---|---|---|
-| `maxDuration: 10s` on all API routes | Claude API calls typically take 10-30s — AI agents will timeout | Upgrade to Vercel Pro (allows up to 300s) |
-| No `dxb1` region on Hobby | App runs from nearest region, not Dubai | Vercel Pro unlocks `dxb1` region |
+| No `dxb1` region on Hobby | App serves from nearest region, not Dubai | Upgrade to Vercel Pro |
 
-**To fix both**: Upgrade to Vercel Pro, then update `vercel.json`:
-```json
-{
-  "regions": ["dxb1"],
-  "functions": {
-    "app/api/commander/route.ts": { "maxDuration": 60 },
-    "app/api/agents/ops/route.ts": { "maxDuration": 30 },
-    "app/api/agents/marketing/route.ts": { "maxDuration": 30 },
-    "app/api/agents/crm/route.ts": { "maxDuration": 30 },
-    "app/api/webhooks/stripe/route.ts": { "maxDuration": 10 },
-    "app/api/webhooks/twilio/route.ts": { "maxDuration": 10 }
-  }
-}
+Function timeouts are **not** a Hobby plan limitation — the platform default is 300s on all plans. AI agent calls will work fine.
+
+**To add Dubai region**: Upgrade to Vercel Pro, then add to `vercel.ts`:
+```ts
+export const config: VercelConfig = {
+  regions: ["dxb1"],
+  // ... rest of config
+};
 ```
 
 ---
