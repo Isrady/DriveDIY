@@ -1,4 +1,4 @@
-export type AgentName = "commander" | "ops" | "marketing" | "crm";
+export type AgentName = "commander" | "ops" | "marketing" | "crm" | "dev";
 
 export interface AgentMessage {
   role: "user" | "assistant";
@@ -9,7 +9,7 @@ export interface AgentMessage {
 
 export interface CommanderResponse {
   message: string;
-  route_to: "ops" | "marketing" | "crm" | null;
+  route_to: "ops" | "marketing" | "crm" | "dev" | null;
   agent_payload: Record<string, unknown> | null;
   needs_permission: boolean;
   permission_request: PermissionRequest | null;

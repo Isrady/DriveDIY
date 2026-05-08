@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 const BAYS = [
   { id: "bay-1", name: "Bay 1", type: "Standard", price: 85, icon: "🏗️" },
@@ -20,7 +19,11 @@ const TOOLS = [
   "Jack Stand Set",
 ];
 
-const TIME_SLOTS = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"];
+const TIME_SLOTS = [
+  "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
+  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00",
+  "19:00", "20:00", "21:00",
+];
 
 export default function BookBayScreen({ userId }: { userId: string }) {
   const [step, setStep] = useState(1);
@@ -30,9 +33,11 @@ export default function BookBayScreen({ userId }: { userId: string }) {
   const [selectedBay, setSelectedBay] = useState<string | null>(null);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  // userId is kept in props for potential future use (e.g. analytics)
+  void userId;
+
   const total = selectedBay ? hours * 85 + (selectedTools.length > 0 ? 25 : 0) : 0;
 
   function toggleTool(tool: string) {
@@ -44,44 +49,40 @@ export default function BookBayScreen({ userId }: { userId: string }) {
   async function handleConfirm() {
     if (!selectedBay || !date || !time) return;
     setLoading(true);
+    setError(null);
 
     const startTime = new Date(`${date}T${time}:00`);
     const endTime = new Date(startTime.getTime() + hours * 60 * 60 * 1000);
 
-    const bay = BAYS.find((b) => b.id === selectedBay);
+    try {
+      const res = await fetch("/api/bookings/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bay_id: selectedBay,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          duration_hours: hours,
+          total_aed: total,
+          tools: selectedTools,
+        }),
+      });
 
-    await supabase.from("bookings").insert({
-      user_id: userId,
-      bay_id: selectedBay,
-      start_time: startTime.toISOString(),
-      end_time: endTime.toISOString(),
-      duration_hours: hours,
-      total_aed: total,
-      status: "pending",
-      payment_status: "unpaid",
-      notes: selectedTools.length > 0 ? `Tools: ${selectedTools.join(", ")}` : null,
-    });
+      const data = await res.json();
 
-    setLoading(false);
-    setSuccess(true);
-  }
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        setLoading(false);
+        return;
+      }
 
-  if (success) {
-    return (
-      <div className="p-5 flex flex-col items-center justify-center h-full text-center">
-        <div className="text-6xl mb-4">✅</div>
-        <h2 className="font-display text-3xl text-chrome mb-2">Booked!</h2>
-        <p className="font-body text-chrome/50 text-sm mb-6">
-          Your bay is reserved. Payment completes at check-in or online.
-        </p>
-        <button
-          onClick={() => { setSuccess(false); setStep(1); setSelectedBay(null); setDate(""); setTime(""); }}
-          className="bg-ember text-white font-label text-xs uppercase tracking-widest px-6 py-3 rounded-xl"
-        >
-          Book Another
-        </button>
-      </div>
-    );
+      // Redirect to Stripe Checkout — payment completes there
+      // On success, Stripe sends us back to /dashboard/app?booking=success
+      window.location.href = data.url;
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+      setLoading(false);
+    }
   }
 
   return (
@@ -130,7 +131,9 @@ export default function BookBayScreen({ userId }: { userId: string }) {
                   key={t}
                   onClick={() => setTime(t)}
                   className={`py-2 rounded-lg font-label text-xs transition-colors ${
-                    time === t ? "bg-ember text-white" : "bg-steel text-chrome/60 hover:text-chrome"
+                    time === t
+                      ? "bg-ember text-white"
+                      : "bg-steel text-chrome/60 hover:text-chrome"
                   }`}
                 >
                   {t}
@@ -151,7 +154,8 @@ export default function BookBayScreen({ userId }: { userId: string }) {
               className="w-full accent-ember"
             />
             <div className="flex justify-between font-label text-xs text-chrome/30 mt-1">
-              <span>1hr</span><span>8hr</span>
+              <span>1hr</span>
+              <span>8hr</span>
             </div>
           </div>
           <button
@@ -232,7 +236,9 @@ export default function BookBayScreen({ userId }: { userId: string }) {
               >
                 <div
                   className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                    selectedTools.includes(tool) ? "border-ember bg-ember" : "border-chrome/30"
+                    selectedTools.includes(tool)
+                      ? "border-ember bg-ember"
+                      : "border-chrome/30"
                   }`}
                 >
                   {selectedTools.includes(tool) && (
@@ -265,18 +271,24 @@ export default function BookBayScreen({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Step 4: Confirm */}
+      {/* Step 4: Confirm & Pay */}
       {step === 4 && (
         <div className="space-y-4">
           <p className="font-label text-xs text-chrome/40 uppercase tracking-widest">
-            Step 4 — Confirm
+            Step 4 — Confirm & Pay
           </p>
           <div className="bg-midnight border border-steel rounded-xl p-5 space-y-3">
             {[
               { label: "Date", value: date },
               { label: "Time", value: `${time} · ${hours}hr` },
-              { label: "Bay", value: BAYS.find((b) => b.id === selectedBay)?.name ?? "" },
-              { label: "Tools", value: selectedTools.length > 0 ? "Kit included" : "None" },
+              {
+                label: "Bay",
+                value: BAYS.find((b) => b.id === selectedBay)?.name ?? "",
+              },
+              {
+                label: "Tools",
+                value: selectedTools.length > 0 ? "Kit included" : "None",
+              },
             ].map((row) => (
               <div key={row.label} className="flex justify-between">
                 <span className="font-label text-xs text-chrome/30 uppercase tracking-wider">
@@ -292,19 +304,38 @@ export default function BookBayScreen({ userId }: { userId: string }) {
               <span className="font-display text-2xl text-ember">AED {total}</span>
             </div>
           </div>
+
+          {error && (
+            <div className="bg-red-900/20 border border-red-500/40 text-red-400 rounded-xl p-4 text-sm font-body">
+              {error}
+            </div>
+          )}
+
+          <p className="font-label text-xs text-chrome/30 text-center">
+            You&apos;ll be taken to Stripe to complete payment securely.
+          </p>
+
           <div className="flex gap-3">
             <button
               onClick={() => setStep(3)}
-              className="flex-1 border border-steel text-chrome font-label text-sm uppercase tracking-widest py-4 rounded-xl"
+              disabled={loading}
+              className="flex-1 border border-steel text-chrome font-label text-sm uppercase tracking-widest py-4 rounded-xl disabled:opacity-40"
             >
               ← Back
             </button>
             <button
               onClick={handleConfirm}
               disabled={loading}
-              className="flex-1 bg-ember text-white font-label text-sm uppercase tracking-widest py-4 rounded-xl disabled:opacity-50"
+              className="flex-1 bg-ember text-white font-label text-sm uppercase tracking-widest py-4 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {loading ? "..." : "Confirm"}
+              {loading ? (
+                <>
+                  <span className="animate-spin text-lg">⏳</span>
+                  <span>Redirecting...</span>
+                </>
+              ) : (
+                "Pay AED " + total
+              )}
             </button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runCommanderAgent } from "@/agents/commander";
+import { runDevAgent } from "@/agents/dev";
 import type Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
-          await runCommanderAgent({
+          const commanderResult = await runCommanderAgent({
             messages: anthropicMessages,
             userId: user.id,
             sessionId,
@@ -37,6 +38,31 @@ export async function POST(req: NextRequest) {
               );
             },
           });
+
+          // If Commander routed to Dev, call the Dev Agent and stream its response too
+          if (commanderResult.route_to === "dev") {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ route_to: "dev", chunk: "\n\n[Dev Agent]\n" })}\n\n`
+              )
+            );
+            const devPayload =
+              (commanderResult.agent_payload as Anthropic.MessageParam[] | null) ??
+              anthropicMessages;
+
+            const devResult = await runDevAgent({
+              messages: Array.isArray(devPayload) ? devPayload : anthropicMessages,
+              userId: user.id,
+              sessionId,
+            });
+
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ chunk: devResult.message, dev_result: devResult })}\n\n`
+              )
+            );
+          }
+
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Agent error";
@@ -60,12 +86,28 @@ export async function POST(req: NextRequest) {
 
   // Non-streaming
   try {
-    const result = await runCommanderAgent({
+    const commanderResult = await runCommanderAgent({
       messages: anthropicMessages,
       userId: user.id,
       sessionId,
     });
-    return NextResponse.json(result);
+
+    // If Commander decides to route to Dev, run the Dev Agent and attach its result
+    if (commanderResult.route_to === "dev") {
+      const devPayload =
+        (commanderResult.agent_payload as Anthropic.MessageParam[] | null) ??
+        anthropicMessages;
+
+      const devResult = await runDevAgent({
+        messages: Array.isArray(devPayload) ? devPayload : anthropicMessages,
+        userId: user.id,
+        sessionId,
+      });
+
+      return NextResponse.json({ ...commanderResult, dev_result: devResult });
+    }
+
+    return NextResponse.json(commanderResult);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Agent error";
     return NextResponse.json({ error: msg }, { status: 500 });

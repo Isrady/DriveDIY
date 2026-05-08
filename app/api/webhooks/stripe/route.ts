@@ -5,6 +5,7 @@ import { getStripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
 import { sendBookingConfirmationWhatsApp } from "@/lib/twilio";
 import { sendBookingConfirmation } from "@/lib/email";
+import { createBayBookingEvent } from "@/lib/calendar";
 
 export const maxDuration = 10;
 
@@ -66,8 +67,10 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
   const { bookingId, userId } = paymentIntent.metadata;
   if (!bookingId) return;
 
+  const admin = getSupabaseAdmin();
+
   // Update booking payment status
-  const { data: booking } = await getSupabaseAdmin()
+  const { data: booking } = await admin
     .from("bookings")
     .update({
       payment_status: "paid",
@@ -76,15 +79,55 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", bookingId)
-    .select(`*, bays(name), users(email, full_name, phone)`)
+    .select(`*, bays(name, google_calendar_id), users(email, full_name, phone)`)
     .single();
 
   if (!booking) return;
 
-  // Send confirmation communications
-  const user = booking.users as { email: string; full_name: string; phone: string } | null;
-  const bay = booking.bays as { name: string } | null;
+  const user = booking.users as {
+    email: string;
+    full_name: string;
+    phone: string;
+  } | null;
+  const bay = booking.bays as {
+    name: string;
+    google_calendar_id: string | null;
+  } | null;
 
+  // ── Google Calendar event creation ──────────────────────────────────────────
+  // Uses per-bay calendar_id if set, otherwise falls back to the shared env var
+  const calendarId =
+    bay?.google_calendar_id ?? process.env.GOOGLE_CALENDAR_ID;
+
+  if (calendarId) {
+    const eventId = await createBayBookingEvent({
+      calendarId,
+      title: `${bay?.name ?? "Bay"} — ${user?.full_name ?? "Customer"}`,
+      startTime: new Date(booking.start_time),
+      endTime: new Date(booking.end_time),
+      description: [
+        `Booking ID: ${bookingId.slice(0, 8).toUpperCase()}`,
+        `Customer: ${user?.full_name ?? "Unknown"}`,
+        user?.phone ? `Phone: ${user.phone}` : null,
+        booking.notes ? `Notes: ${booking.notes}` : null,
+        `Total: AED ${booking.total_aed}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      bookingId,
+      customerName: user?.full_name,
+    });
+
+    // Store the calendar event ID so we can delete it on cancellation
+    if (eventId) {
+      await admin
+        .from("bookings")
+        .update({ calendar_event_id: eventId })
+        .eq("id", bookingId);
+    }
+  }
+
+  // ── Send confirmation communications ────────────────────────────────────────
   if (user && bay) {
     const params = {
       bayName: bay.name,
@@ -95,19 +138,19 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       customerName: user.full_name ?? "there",
     };
 
-    // Send email confirmation
     if (user.email) {
       sendBookingConfirmation({ to: user.email, ...params }).catch(console.error);
     }
 
-    // Send WhatsApp confirmation
     if (user.phone) {
-      sendBookingConfirmationWhatsApp({ to: user.phone, ...params }).catch(console.error);
+      sendBookingConfirmationWhatsApp({ to: user.phone, ...params }).catch(
+        console.error
+      );
     }
   }
 
-  // Log event
-  await getSupabaseAdmin().from("events").insert({
+  // ── Log event ───────────────────────────────────────────────────────────────
+  await admin.from("events").insert({
     event_type: "booking_paid",
     title: `Booking paid: ${bookingId.slice(0, 8).toUpperCase()}`,
     body: `Payment of AED ${paymentIntent.amount / 100} confirmed`,
@@ -150,12 +193,13 @@ async function handleSubscriptionCancelled(subscription: Stripe.Subscription) {
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string;
 
-  // Log event
-  await getSupabaseAdmin().from("events").insert({
-    event_type: "payment_failed",
-    title: "Subscription payment failed",
-    body: `Customer ${customerId} — invoice ${invoice.id}`,
-    entity_type: "invoice",
-    metadata: { customerId, invoiceId: invoice.id },
-  });
+  await getSupabaseAdmin()
+    .from("events")
+    .insert({
+      event_type: "payment_failed",
+      title: "Subscription payment failed",
+      body: `Customer ${customerId} — invoice ${invoice.id}`,
+      entity_type: "invoice",
+      metadata: { customerId, invoiceId: invoice.id },
+    });
 }

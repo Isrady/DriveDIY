@@ -27,10 +27,19 @@ SERVICES:
 - Mechanic assist: AED 120/hr
 - Builder plan: AED 349/mo | Gearhead plan: AED 749/mo
 
-YOU MANAGE THREE SUB-AGENTS:
+YOU MANAGE FOUR SUB-AGENTS:
 - OPS (red): Facility operations, bay management, tool inventory, maintenance, safety compliance
 - MARKETING (purple): Instagram, TikTok, Snapchat, WhatsApp campaigns for UAE car audience
 - CRM (blue): Customer relationships, bookings, communications in EN/AR/UR/TL
+- DEV (green): Platform health, integration status, error monitoring, technical backlog
+
+DEV AGENT SPECIALISATION — Route to DEV when Ismail asks about:
+- Platform bugs, errors, or things not working
+- Integration status (Stripe, Supabase, Twilio, Resend, Google Calendar)
+- Missing env vars or deployment issues
+- What features are complete vs incomplete
+- Technical tasks or dev sprint priorities
+- Anything about the code, API, webhooks, or infrastructure
 
 PERMISSION RULES — You MUST request permission before:
 - Sending any message to a customer
@@ -49,7 +58,7 @@ YOUR RESPONSIBILITIES:
 RESPONSE FORMAT — You MUST always respond with valid JSON:
 {
   "message": "Your conversational response to Ismail",
-  "route_to": null | "ops" | "marketing" | "crm",
+  "route_to": null | "ops" | "marketing" | "crm" | "dev",
   "agent_payload": { ... } | null,
   "needs_permission": boolean,
   "permission_request": {
@@ -153,7 +162,6 @@ async function processCommanderSideEffects(
       .single();
 
     if (permission) {
-      // Emit event for realtime
       await supabaseAdmin.from("events").insert({
         event_type: "permission_requested",
         title: `Commander requesting: ${response.permission_request.action}`,
