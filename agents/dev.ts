@@ -217,10 +217,10 @@ export async function runDevAgent(input: DevInput): Promise<DevResponse> {
   });
 
   try {
-    return parseClaudeJSON<DevResponse>(result);
+    return parseClaudeJSON<DevResponse>(result.content);
   } catch {
     return {
-      message: result,
+      message: result.content,
       integration_status: {
         supabase: envVarStatus.NEXT_PUBLIC_SUPABASE_URL ? "connected" : "unconfigured",
         stripe: envVarStatus.STRIPE_SECRET_KEY ? "connected" : "unconfigured",
