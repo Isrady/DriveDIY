@@ -15,6 +15,7 @@ const INITIAL_AGENTS: AgentStatus[] = [
   { name: "ops", label: "OPS AGENT", color: "#E8330A", status: "standby" },
   { name: "marketing", label: "MARKETING", color: "#A855F7", status: "standby" },
   { name: "crm", label: "CRM AGENT", color: "#3B82F6", status: "standby" },
+  { name: "dev", label: "DEV AGENT", color: "#22C55E", status: "standby" },
 ];
 
 interface Props {

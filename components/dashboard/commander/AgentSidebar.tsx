@@ -13,6 +13,7 @@ const AGENT_TREE = [
   { indent: 1, key: "ops" },
   { indent: 1, key: "marketing" },
   { indent: 1, key: "crm" },
+  { indent: 1, key: "dev" },
 ];
 
 interface Props {
@@ -92,6 +93,8 @@ export default function AgentSidebar({ agents, recentLogs }: Props) {
                           ? "#E8330A"
                           : log.agent === "marketing"
                           ? "#A855F7"
+                          : log.agent === "dev"
+                          ? "#22C55E"
                           : "#3B82F6",
                     }}
                   >
