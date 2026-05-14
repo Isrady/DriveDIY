@@ -1,8 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import VideoModal from "@/components/dashboard/VideoModal";
 
 type Lang = "en" | "ar" | "ur" | "tl";
+
+interface Guide {
+  id: string | number;
+  title: Record<Lang, string>;
+  level: string;
+  duration: string;
+  icon: string;
+  tags: string[];
+  youtube_id?: string | null;
+}
 
 const LANGUAGES: { id: Lang; label: string; flag: string }[] = [
   { id: "en", label: "English", flag: "🇬🇧" },
@@ -11,54 +23,36 @@ const LANGUAGES: { id: Lang; label: string; flag: string }[] = [
   { id: "tl", label: "Filipino", flag: "🇵🇭" },
 ];
 
-const GUIDES = [
+const STATIC_GUIDES: Guide[] = [
   {
     id: 1,
     title: { en: "Oil Change Complete Guide", ar: "دليل تغيير الزيت الكامل", ur: "آئل چینج مکمل گائیڈ", tl: "Kumpletong Gabay sa Pagpapalit ng Langis" },
-    level: "Beginner",
-    duration: "45 min",
-    icon: "🛢️",
-    tags: ["engine", "maintenance"],
+    level: "Beginner", duration: "45 min", icon: "🛢️", tags: ["engine", "maintenance"],
   },
   {
     id: 2,
     title: { en: "Brake Pad Replacement", ar: "تبديل أكواب الفرامل", ur: "بریک پیڈ تبدیلی", tl: "Pagpapalit ng Brake Pad" },
-    level: "Beginner",
-    duration: "90 min",
-    icon: "🛞",
-    tags: ["brakes", "safety"],
+    level: "Beginner", duration: "90 min", icon: "🛞", tags: ["brakes", "safety"],
   },
   {
     id: 3,
     title: { en: "OBD Diagnostics 101", ar: "تشخيص OBD للمبتدئين", ur: "OBD تشخیص بنیادی باتیں", tl: "OBD Diagnostics Para sa Mga Baguhan" },
-    level: "Beginner",
-    duration: "30 min",
-    icon: "📱",
-    tags: ["diagnostic", "electronics"],
+    level: "Beginner", duration: "30 min", icon: "📱", tags: ["diagnostic", "electronics"],
   },
   {
     id: 4,
     title: { en: "Suspension Basics", ar: "أساسيات نظام التعليق", ur: "سسپنشن کی بنیادی باتیں", tl: "Mga Pangunahing Kaalaman sa Suspension" },
-    level: "Intermediate",
-    duration: "2 hr",
-    icon: "🔩",
-    tags: ["suspension", "handling"],
+    level: "Intermediate", duration: "2 hr", icon: "🔩", tags: ["suspension", "handling"],
   },
   {
     id: 5,
     title: { en: "Turbo Install Guide", ar: "دليل تركيب التوربو", ur: "ٹربو انسٹال گائیڈ", tl: "Gabay sa Pag-install ng Turbo" },
-    level: "Advanced",
-    duration: "4 hr",
-    icon: "💨",
-    tags: ["performance", "engine"],
+    level: "Advanced", duration: "4 hr", icon: "💨", tags: ["performance", "engine"],
   },
   {
     id: 6,
     title: { en: "Wheel Alignment Check", ar: "فحص ميزان العجلات", ur: "وھیل الائنمنٹ چیک", tl: "Pagsusuri ng Wheel Alignment" },
-    level: "Beginner",
-    duration: "20 min",
-    icon: "⚖️",
-    tags: ["wheels", "handling"],
+    level: "Beginner", duration: "20 min", icon: "⚖️", tags: ["wheels", "handling"],
   },
 ];
 
@@ -71,9 +65,40 @@ const LEVEL_COLORS: Record<string, string> = {
 export default function AcademyScreen() {
   const [lang, setLang] = useState<Lang>("en");
   const [filter, setFilter] = useState("all");
+  const [guides, setGuides] = useState<Guide[]>(STATIC_GUIDES);
+  const [activeGuide, setActiveGuide] = useState<{ youtubeId: string | null; title: string } | null>(null);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    supabase
+      .from("guides")
+      .select("*")
+      .eq("is_published", true)
+      .order("sort_order")
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        setGuides(
+          data.map((row) => ({
+            id: row.id,
+            title: {
+              en: row.title_en ?? "",
+              ar: row.title_ar ?? row.title_en ?? "",
+              ur: row.title_ur ?? row.title_en ?? "",
+              tl: row.title_tl ?? row.title_en ?? "",
+            },
+            level: row.level,
+            duration: row.duration_text,
+            icon: row.icon ?? "🔧",
+            tags: row.tags ?? [],
+            youtube_id: row.youtube_id ?? null,
+          }))
+        );
+      });
+  }, []);
 
   const filtered =
-    filter === "all" ? GUIDES : GUIDES.filter((g) => g.level.toLowerCase() === filter);
+    filter === "all" ? guides : guides.filter((g) => g.level.toLowerCase() === filter);
 
   return (
     <div className="p-5">
@@ -115,6 +140,12 @@ export default function AcademyScreen() {
         {filtered.map((guide) => (
           <button
             key={guide.id}
+            onClick={() =>
+              setActiveGuide({
+                youtubeId: guide.youtube_id ?? null,
+                title: guide.title[lang],
+              })
+            }
             className="w-full bg-midnight border border-steel rounded-2xl p-4 flex items-start gap-4 text-left hover:border-ember/30 transition-colors"
           >
             <div className="text-3xl">{guide.icon}</div>
@@ -140,10 +171,19 @@ export default function AcademyScreen() {
                 ))}
               </div>
             </div>
-            <span className="text-chrome/30 text-sm mt-1">▶</span>
+            <span className="font-label text-[10px] text-ember/70 uppercase tracking-wider mt-1 flex-shrink-0">
+              ▶ Watch
+            </span>
           </button>
         ))}
       </div>
+
+      <VideoModal
+        isOpen={!!activeGuide}
+        onClose={() => setActiveGuide(null)}
+        youtubeId={activeGuide?.youtubeId ?? null}
+        title={activeGuide?.title ?? ""}
+      />
     </div>
   );
 }

@@ -1,15 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { Bay } from "@/types/database";
 
-const BAYS = [
-  { id: "bay-1", name: "Bay 1", type: "Standard", price: 85, icon: "🏗️" },
-  { id: "bay-2", name: "Bay 2", type: "Standard", price: 85, icon: "🏗️" },
-  { id: "bay-3", name: "Bay 3", type: "2-Post Lift", price: 85, icon: "⬆️" },
-  { id: "bay-4", name: "Bay 4", type: "4-Post Lift", price: 85, icon: "⬆️" },
-  { id: "bay-5", name: "Bay 5", type: "Detail Bay", price: 85, icon: "✨" },
-];
+const BAY_ICONS: Record<string, string> = {
+  standard: "🏗️",
+  lift: "⬆️",
+  detail: "✨",
+};
 
 const TOOLS = [
   "Torque Wrench Kit",
@@ -20,20 +19,40 @@ const TOOLS = [
   "Jack Stand Set",
 ];
 
-const TIME_SLOTS = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"];
+const TIME_SLOTS = [
+  "07:00","08:00","09:00","10:00","11:00","12:00",
+  "13:00","14:00","15:00","16:00","17:00","18:00",
+  "19:00","20:00","21:00",
+];
 
 export default function BookBayScreen({ userId }: { userId: string }) {
   const [step, setStep] = useState(1);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [hours, setHours] = useState(2);
+  const [bays, setBays] = useState<Bay[]>([]);
+  const [baysLoading, setBaysLoading] = useState(true);
   const [selectedBay, setSelectedBay] = useState<string | null>(null);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const supabase = createClient();
-  const total = selectedBay ? hours * 85 + (selectedTools.length > 0 ? 25 : 0) : 0;
+
+  useEffect(() => {
+    supabase
+      .from("bays")
+      .select("*")
+      .eq("is_active", true)
+      .order("name")
+      .then(({ data }) => {
+        setBays(data ?? []);
+        setBaysLoading(false);
+      });
+  }, []);
+
+  const bayRate = bays.find((b) => b.id === selectedBay)?.hourly_rate_aed ?? 85;
+  const total = selectedBay ? hours * bayRate + (selectedTools.length > 0 ? 25 : 0) : 0;
 
   function toggleTool(tool: string) {
     setSelectedTools((prev) =>
@@ -44,52 +63,48 @@ export default function BookBayScreen({ userId }: { userId: string }) {
   async function handleConfirm() {
     if (!selectedBay || !date || !time) return;
     setLoading(true);
+    setError(null);
 
     const startTime = new Date(`${date}T${time}:00`);
     const endTime = new Date(startTime.getTime() + hours * 60 * 60 * 1000);
 
-    const bay = BAYS.find((b) => b.id === selectedBay);
+    try {
+      const res = await fetch("/api/bookings/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bayId: selectedBay,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          durationHours: hours,
+          totalAed: total,
+          tools: selectedTools,
+        }),
+      });
 
-    await supabase.from("bookings").insert({
-      user_id: userId,
-      bay_id: selectedBay,
-      start_time: startTime.toISOString(),
-      end_time: endTime.toISOString(),
-      duration_hours: hours,
-      total_aed: total,
-      status: "pending",
-      payment_status: "unpaid",
-      notes: selectedTools.length > 0 ? `Tools: ${selectedTools.join(", ")}` : null,
-    });
+      const data = await res.json();
 
-    setLoading(false);
-    setSuccess(true);
+      if (!res.ok || !data.url) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      setError("Network error. Please try again.");
+      setLoading(false);
+    }
   }
 
-  if (success) {
-    return (
-      <div className="p-5 flex flex-col items-center justify-center h-full text-center">
-        <div className="text-6xl mb-4">✅</div>
-        <h2 className="font-display text-3xl text-chrome mb-2">Booked!</h2>
-        <p className="font-body text-chrome/50 text-sm mb-6">
-          Your bay is reserved. Payment completes at check-in or online.
-        </p>
-        <button
-          onClick={() => { setSuccess(false); setStep(1); setSelectedBay(null); setDate(""); setTime(""); }}
-          className="bg-ember text-white font-label text-xs uppercase tracking-widest px-6 py-3 rounded-xl"
-        >
-          Book Another
-        </button>
-      </div>
-    );
-  }
+  // userId is required for the booking association
+  void userId;
 
   return (
     <div className="p-5">
       {/* Header */}
       <div className="mb-5">
         <h2 className="font-display text-3xl text-chrome">BOOK A BAY</h2>
-        {/* Progress dots */}
         <div className="flex gap-2 mt-3">
           {[1, 2, 3, 4].map((s) => (
             <div
@@ -140,7 +155,7 @@ export default function BookBayScreen({ userId }: { userId: string }) {
           </div>
           <div>
             <label className="font-label text-xs text-chrome/50 uppercase tracking-wider block mb-2">
-              Duration: {hours}hr — AED {hours * 85}
+              Duration: {hours}hr — AED {hours * bayRate}
             </label>
             <input
               type="range"
@@ -170,31 +185,39 @@ export default function BookBayScreen({ userId }: { userId: string }) {
           <p className="font-label text-xs text-chrome/40 uppercase tracking-widest">
             Step 2 — Which Bay?
           </p>
-          <div className="space-y-3">
-            {BAYS.map((bay) => (
-              <button
-                key={bay.id}
-                onClick={() => setSelectedBay(bay.id)}
-                className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all text-left ${
-                  selectedBay === bay.id
-                    ? "border-ember bg-ember/10"
-                    : "border-steel bg-steel hover:border-chrome/30"
-                }`}
-              >
-                <span className="text-2xl">{bay.icon}</span>
-                <div className="flex-1">
-                  <p className="font-display text-xl text-chrome">{bay.name}</p>
-                  <p className="font-label text-xs text-chrome/40 uppercase tracking-wider">
-                    {bay.type}
-                  </p>
-                </div>
-                <span className="font-display text-xl text-ember">
-                  {bay.price}
-                  <span className="text-sm">/hr</span>
-                </span>
-              </button>
-            ))}
-          </div>
+          {baysLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-20 bg-steel rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {bays.map((bay) => (
+                <button
+                  key={bay.id}
+                  onClick={() => setSelectedBay(bay.id)}
+                  className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all text-left ${
+                    selectedBay === bay.id
+                      ? "border-ember bg-ember/10"
+                      : "border-steel bg-steel hover:border-chrome/30"
+                  }`}
+                >
+                  <span className="text-2xl">{BAY_ICONS[bay.bay_type] ?? "🏗️"}</span>
+                  <div className="flex-1">
+                    <p className="font-display text-xl text-chrome">{bay.name}</p>
+                    <p className="font-label text-xs text-chrome/40 uppercase tracking-wider">
+                      {bay.bay_type.replace("_", " ")}
+                    </p>
+                  </div>
+                  <span className="font-display text-xl text-ember">
+                    {bay.hourly_rate_aed}
+                    <span className="text-sm">/hr</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-3">
             <button
               onClick={() => setStep(1)}
@@ -265,17 +288,17 @@ export default function BookBayScreen({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Step 4: Confirm */}
+      {/* Step 4: Confirm & Pay */}
       {step === 4 && (
         <div className="space-y-4">
           <p className="font-label text-xs text-chrome/40 uppercase tracking-widest">
-            Step 4 — Confirm
+            Step 4 — Confirm & Pay
           </p>
           <div className="bg-midnight border border-steel rounded-xl p-5 space-y-3">
             {[
               { label: "Date", value: date },
               { label: "Time", value: `${time} · ${hours}hr` },
-              { label: "Bay", value: BAYS.find((b) => b.id === selectedBay)?.name ?? "" },
+              { label: "Bay", value: bays.find((b) => b.id === selectedBay)?.name ?? "" },
               { label: "Tools", value: selectedTools.length > 0 ? "Kit included" : "None" },
             ].map((row) => (
               <div key={row.label} className="flex justify-between">
@@ -292,9 +315,16 @@ export default function BookBayScreen({ userId }: { userId: string }) {
               <span className="font-display text-2xl text-ember">AED {total}</span>
             </div>
           </div>
+
+          {error && (
+            <p className="font-body text-xs text-race-red text-center bg-race-red/10 border border-race-red/20 rounded-xl px-4 py-3">
+              {error}
+            </p>
+          )}
+
           <div className="flex gap-3">
             <button
-              onClick={() => setStep(3)}
+              onClick={() => { setStep(3); setError(null); }}
               className="flex-1 border border-steel text-chrome font-label text-sm uppercase tracking-widest py-4 rounded-xl"
             >
               ← Back
@@ -304,7 +334,7 @@ export default function BookBayScreen({ userId }: { userId: string }) {
               disabled={loading}
               className="flex-1 bg-ember text-white font-label text-sm uppercase tracking-widest py-4 rounded-xl disabled:opacity-50"
             >
-              {loading ? "..." : "Confirm"}
+              {loading ? "..." : "Pay Now"}
             </button>
           </div>
         </div>

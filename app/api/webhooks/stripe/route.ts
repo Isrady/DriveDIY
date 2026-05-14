@@ -5,6 +5,7 @@ import { getStripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
 import { sendBookingConfirmationWhatsApp } from "@/lib/twilio";
 import { sendBookingConfirmation } from "@/lib/email";
+import { createBayBookingEvent } from "@/lib/calendar";
 
 export const maxDuration = 10;
 
@@ -63,10 +64,15 @@ export async function POST(req: Request) {
 }
 
 async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
-  const { bookingId, userId } = paymentIntent.metadata;
+  const { bookingId, orderId, userId } = paymentIntent.metadata;
+
+  if (orderId) {
+    await handleOrderPaymentSuccess(orderId, paymentIntent.id);
+    return;
+  }
+
   if (!bookingId) return;
 
-  // Update booking payment status
   const { data: booking } = await getSupabaseAdmin()
     .from("bookings")
     .update({
@@ -76,14 +82,13 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", bookingId)
-    .select(`*, bays(name), users(email, full_name, phone)`)
+    .select("*, bays(name, google_calendar_id), users(email, full_name, phone)")
     .single();
 
   if (!booking) return;
 
-  // Send confirmation communications
   const user = booking.users as { email: string; full_name: string; phone: string } | null;
-  const bay = booking.bays as { name: string } | null;
+  const bay = booking.bays as { name: string; google_calendar_id: string | null } | null;
 
   if (user && bay) {
     const params = {
@@ -95,24 +100,66 @@ async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
       customerName: user.full_name ?? "there",
     };
 
-    // Send email confirmation
     if (user.email) {
       sendBookingConfirmation({ to: user.email, ...params }).catch(console.error);
     }
-
-    // Send WhatsApp confirmation
     if (user.phone) {
       sendBookingConfirmationWhatsApp({ to: user.phone, ...params }).catch(console.error);
     }
   }
 
-  // Log event
+  if (bay?.google_calendar_id) {
+    createBayBookingEvent({
+      calendarId: bay.google_calendar_id,
+      title: `DriveDIY — ${bay.name}`,
+      startTime: new Date(booking.start_time),
+      endTime: new Date(booking.end_time),
+      description: `Booking ${bookingId.slice(0, 8).toUpperCase()}${user?.full_name ? ` · ${user.full_name}` : ""}`,
+      bookingId,
+      customerName: user?.full_name ?? undefined,
+    })
+      .then((eventId) => {
+        if (eventId) {
+          getSupabaseAdmin()
+            .from("bookings")
+            .update({ google_event_id: eventId })
+            .eq("id", bookingId)
+            .then(() => {});
+        }
+      })
+      .catch(console.error);
+  }
+
   await getSupabaseAdmin().from("events").insert({
     event_type: "booking_paid",
     title: `Booking paid: ${bookingId.slice(0, 8).toUpperCase()}`,
     body: `Payment of AED ${paymentIntent.amount / 100} confirmed`,
     entity_type: "booking",
     entity_id: bookingId,
+  });
+
+  void userId;
+}
+
+async function handleOrderPaymentSuccess(
+  orderId: string,
+  paymentIntentId: string
+) {
+  await getSupabaseAdmin()
+    .from("orders")
+    .update({
+      status: "processing",
+      stripe_payment_intent_id: paymentIntentId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId);
+
+  await getSupabaseAdmin().from("events").insert({
+    event_type: "order_paid",
+    title: `Order paid: ${orderId.slice(0, 8).toUpperCase()}`,
+    body: `Parts order is now processing`,
+    entity_type: "order",
+    entity_id: orderId,
   });
 }
 
