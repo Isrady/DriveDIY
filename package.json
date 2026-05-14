@@ -1,7 +1,9 @@
 {
-  "name": "drivediy-temp",
+  "name": "drivediy",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
+  "author": "DriveDIY",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
