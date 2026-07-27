@@ -47,9 +47,9 @@ export default function CommanderLayout({
   const [agents, setAgents] = useState<AgentStatus[]>(INITIAL_AGENTS);
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId] = useState(() => `session_${Date.now()}`);
-  const [rightPanel, setRightPanel] = useState<"permissions" | "checklist" | "recommendations">(
-    "permissions"
-  );
+  const [rightPanel, setRightPanel] = useState<
+    "agents" | "permissions" | "checklist" | "recommendations"
+  >("permissions");
 
   const supabase = createClient();
   const streamRef = useRef<AbortController | null>(null);
@@ -249,27 +249,32 @@ export default function CommanderLayout({
   const pendingPermissions = permissions.filter((p) => p.status === "pending");
 
   return (
-    <div className="flex h-screen bg-midnight text-chrome overflow-hidden">
-      {/* Left sidebar */}
-      <AgentSidebar agents={agents} recentLogs={recentLogs} />
-
-      {/* Main chat area */}
+    <div className="flex h-full overflow-hidden text-chrome">
+      {/* Commander chat — fills main content area */}
       <main className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
-        <div className="flex-shrink-0 h-14 border-b border-steel flex items-center justify-between px-6 bg-midnight">
+        {/* Sub-header: agent status bar */}
+        <div className="flex-shrink-0 h-10 border-b border-steel flex items-center justify-between px-5 bg-midnight/60">
           <div className="flex items-center gap-3">
-            <span className="font-display text-xl text-chrome">COMMANDER</span>
-            <span className="font-label text-xs text-chrome/30 uppercase tracking-widest">
-              / DriveDIY Control Center
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="font-label text-xs text-chrome/50 uppercase tracking-widest">
+              Commander AI
+            </span>
+            <span className="font-label text-[10px] text-chrome/20 uppercase">
+              · {agents.find((a) => a.name === "commander")?.status ?? "standby"}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <a
-              href="/dashboard/app"
-              className="font-label text-xs text-chrome/30 hover:text-chrome uppercase tracking-widest transition-colors"
-            >
-              ← App
-            </a>
+          <div className="flex items-center gap-3">
+            {agents.slice(1).map((a) => (
+              <div key={a.name} className="flex items-center gap-1.5">
+                <div
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: a.color + (a.status === "standby" ? "55" : "ff") }}
+                />
+                <span className="font-label text-[10px] text-chrome/30 uppercase tracking-wider">
+                  {a.label}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -283,28 +288,17 @@ export default function CommanderLayout({
       {/* Right panel */}
       <aside className="w-80 flex-shrink-0 flex flex-col border-l border-steel bg-carbon overflow-hidden">
         {/* Panel tabs */}
-        <div className="flex border-b border-steel flex-shrink-0">
+        <div className="flex border-b border-steel flex-shrink-0 overflow-x-auto">
           {[
-            {
-              id: "permissions" as const,
-              label: "Approvals",
-              count: pendingPermissions.length,
-            },
-            {
-              id: "checklist" as const,
-              label: "Launch",
-              count: checklist.length - completedChecklist,
-            },
-            {
-              id: "recommendations" as const,
-              label: "Intel",
-              count: recommendations.length,
-            },
+            { id: "agents" as const,          label: "Agents",    count: 0 },
+            { id: "permissions" as const,      label: "Approvals", count: pendingPermissions.length },
+            { id: "checklist" as const,        label: "Launch",    count: checklist.length - completedChecklist },
+            { id: "recommendations" as const,  label: "Intel",     count: recommendations.length },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setRightPanel(tab.id)}
-              className={`flex-1 py-3 font-label text-xs uppercase tracking-wider transition-colors relative ${
+              className={`flex-1 py-3 font-label text-[10px] uppercase tracking-wider transition-colors whitespace-nowrap px-2 ${
                 rightPanel === tab.id
                   ? "text-ember border-b-2 border-ember"
                   : "text-chrome/30 hover:text-chrome/60"
@@ -312,7 +306,7 @@ export default function CommanderLayout({
             >
               {tab.label}
               {tab.count > 0 && (
-                <span className="ml-1 bg-ember text-white text-[10px] rounded-full w-4 h-4 inline-flex items-center justify-center">
+                <span className="ml-1 bg-ember text-white text-[9px] rounded-full w-3.5 h-3.5 inline-flex items-center justify-center">
                   {tab.count > 9 ? "9+" : tab.count}
                 </span>
               )}
@@ -322,6 +316,9 @@ export default function CommanderLayout({
 
         {/* Panel content */}
         <div className="flex-1 overflow-y-auto">
+          {rightPanel === "agents" && (
+            <AgentSidebar agents={agents} recentLogs={recentLogs} />
+          )}
           {rightPanel === "permissions" && (
             <PermissionsPanel
               permissions={pendingPermissions}

@@ -24,14 +24,7 @@ export default function AgentSidebar({ agents, recentLogs }: Props) {
   const byName = Object.fromEntries(agents.map((a) => [a.name, a]));
 
   return (
-    <aside className="w-60 flex-shrink-0 flex flex-col border-r border-steel bg-carbon overflow-hidden">
-      {/* Logo */}
-      <div className="flex-shrink-0 h-14 border-b border-steel flex items-center px-5">
-        <span className="font-display text-2xl text-chrome tracking-wider">
-          DRIVE<span className="text-ember">DIY</span>
-        </span>
-      </div>
-
+    <div className="flex flex-col overflow-hidden h-full">
       {/* Agent hierarchy */}
       <div className="flex-shrink-0 p-4 border-b border-steel">
         <p className="font-label text-xs text-chrome/20 uppercase tracking-widest mb-3">
@@ -77,10 +70,7 @@ export default function AgentSidebar({ agents, recentLogs }: Props) {
         ) : (
           <div className="space-y-2">
             {recentLogs.slice(0, 15).map((log) => (
-              <div
-                key={log.id}
-                className="bg-steel/30 rounded-lg p-2.5"
-              >
+              <div key={log.id} className="bg-steel/30 rounded-lg p-2.5">
                 <div className="flex items-center justify-between mb-1">
                   <span
                     className="font-label text-[10px] uppercase tracking-wider"
@@ -120,6 +110,6 @@ export default function AgentSidebar({ agents, recentLogs }: Props) {
           </div>
         )}
       </div>
-    </aside>
+    </div>
   );
 }
