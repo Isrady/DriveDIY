@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateTwilioSignature } from "@/lib/twilio";
+import { validateTwilioSignature, sendWhatsAppMessage } from "@/lib/twilio";
+import { runCRMAgent } from "@/agents/crm";
 
-export const maxDuration = 10;
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
-  // Parse form-urlencoded body from Twilio
   const bodyText = await req.text();
   const params: Record<string, string> = {};
   for (const [k, v] of new URLSearchParams(bodyText).entries()) {
     params[k] = v;
   }
 
-  // Validate Twilio signature
   const twilioSignature = req.headers.get("X-Twilio-Signature") ?? "";
   const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/twilio`;
 
@@ -20,28 +19,33 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Invalid Twilio signature", { status: 403 });
   }
 
-  const inboundMessage = {
-    from: params.From?.replace("whatsapp:", "") ?? "",
-    body: params.Body ?? "",
-    messageSid: params.MessageSid ?? "",
-  };
+  const from = params.From?.replace("whatsapp:", "") ?? "";
+  const body = params.Body ?? "";
 
-  // Route to CRM agent asynchronously
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  fetch(`${appUrl}/api/agents/crm`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "inbound_whatsapp",
-      message: inboundMessage,
-    }),
-  }).catch(console.error);
+  // Call CRM agent directly — no HTTP round-trip, no auth needed
+  try {
+    const result = await runCRMAgent({
+      messages: [
+        {
+          role: "user",
+          content: `Inbound WhatsApp from ${from}: "${body}". Draft a reply message for this customer.`,
+        },
+      ],
+      sessionId: `whatsapp_${from}`,
+    });
 
-  // Return empty TwiML — no immediate auto-reply
+    // Send the CRM agent's reply back via WhatsApp
+    if (result.message && from) {
+      await sendWhatsAppMessage(from, result.message);
+    }
+  } catch (err) {
+    console.error("CRM agent error for inbound WhatsApp:", err);
+  }
+
+  // Respond to Twilio immediately — reply already sent above
   return new NextResponse(
     '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-    {
-      headers: { "Content-Type": "text/xml" },
-    }
+    { headers: { "Content-Type": "text/xml" } }
   );
 }
+

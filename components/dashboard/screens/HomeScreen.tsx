@@ -4,9 +4,10 @@ import type { User, Booking } from "@/types/database";
 interface Props {
   user: Partial<User> & { id: string; email: string };
   nextBooking?: (Booking & { bays?: { name: string } | null }) | null;
+  bookingState?: "success" | "cancelled";
 }
 
-export default function HomeScreen({ user, nextBooking }: Props) {
+export default function HomeScreen({ user, nextBooking, bookingState }: Props) {
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -14,6 +15,26 @@ export default function HomeScreen({ user, nextBooking }: Props) {
 
   return (
     <div className="p-5 space-y-4">
+      {/* Booking return state banner */}
+      {bookingState === "success" && (
+        <div className="bg-green-900/30 border border-green-500/40 rounded-2xl p-4 flex items-start gap-3">
+          <span className="text-xl">✅</span>
+          <div>
+            <p className="font-label text-xs text-green-400 uppercase tracking-widest">Booking Confirmed</p>
+            <p className="font-body text-sm text-chrome/70 mt-0.5">Payment received. Check your email for confirmation.</p>
+          </div>
+        </div>
+      )}
+      {bookingState === "cancelled" && (
+        <div className="bg-steel border border-chrome/10 rounded-2xl p-4 flex items-start gap-3">
+          <span className="text-xl">↩️</span>
+          <div>
+            <p className="font-label text-xs text-chrome/60 uppercase tracking-widest">Payment Cancelled</p>
+            <p className="font-body text-sm text-chrome/50 mt-0.5">No charge was made. Book again when ready.</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="pt-2">
         <p className="font-label text-xs text-chrome/40 uppercase tracking-widest">

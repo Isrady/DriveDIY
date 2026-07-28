@@ -41,6 +41,22 @@ export async function POST(req: Request) {
 
   try {
     switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        // Resolve the payment intent to reuse the same handler
+        if (session.payment_intent && session.metadata?.bookingId) {
+          const pi = await getStripe().paymentIntents.retrieve(
+            session.payment_intent as string
+          );
+          // Merge checkout session metadata onto payment intent for handler
+          if (!pi.metadata.bookingId) {
+            pi.metadata.bookingId = session.metadata.bookingId;
+            pi.metadata.userId = session.metadata.userId ?? "";
+          }
+          await handlePaymentSuccess(pi);
+        }
+        break;
+      }
       case "payment_intent.succeeded":
         await handlePaymentSuccess(event.data.object as Stripe.PaymentIntent);
         break;

@@ -22,9 +22,10 @@ interface Props {
   user: Partial<User> & { id: string; email: string };
   bookings: (Booking & { bays?: { name: string } | null })[];
   vehicles: Vehicle[];
+  bookingState?: "success" | "cancelled";
 }
 
-export default function MobileAppShell({ user, bookings, vehicles }: Props) {
+export default function MobileAppShell({ user, bookings, vehicles, bookingState }: Props) {
   const [screen, setScreen] = useState<Screen>("home");
 
   const nextBooking = bookings.find(
@@ -51,7 +52,7 @@ export default function MobileAppShell({ user, bookings, vehicles }: Props) {
         {/* Screen content */}
         <div className="flex-1 overflow-y-auto bg-carbon">
           {screen === "home" && (
-            <HomeScreen user={user} nextBooking={nextBooking} />
+            <HomeScreen user={user} nextBooking={nextBooking} bookingState={bookingState} />
           )}
           {screen === "book" && <BookBayScreen userId={user.id} />}
           {screen === "garage" && (
